@@ -32,6 +32,16 @@
         <entry name="xmlCacheJson" type="String">
             <default></default>
         </entry>
+	<entry name="soundEffectsEnabled" type="Bool">
+    	<default>true</default>
+    	<label>Sounds Enabled</label>
+    	<description>Play ambient sounds for weather and time changes.</description>
+	</entry>
+    <entry name="useSunriseSunset" type="Bool">
+    <default>true</default>
+    <label>Use Sunrise/Sunset Times</label>
+    <description>Automatically adjust wallpaper and brightness based on real sunrise and sunset.</description>
+    </entry>
     </group>
 
     <group name="Appearance">
