@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Atmosphere Widget v1.0
+Comment=A living desktop that responds to time, weather, and light.
+Type=Service
+X-Plasma-API=declarativeappletscript
+X-Plasma-MainScript=ui/main.qml
+X-Plasma-PreferredSize=800,600
+Icon=weather-clear
+X-Plasma-Provides=org.kde.plasma.genericwidget
+X-Plasma-ResourceFiles=effects/resources.qrc
+X-KDE-PluginInfo-Author=You (with AI assistance)
+X-KDE-PluginInfo-Email=you@nowhere.com
+X-KDE-PluginInfo-Name=com.github.atmosphere.widget
+X-KDE-PluginInfo-Version=2.0
+X-KDE-PluginInfo-Category=System
