@@ -16,6 +16,7 @@
  */
 import QtQuick 2.2
 import QtQuick.Layouts 1.1
+import QtQuick.Particles 2.15
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 import QtQuick.Controls 1.0
@@ -51,6 +52,7 @@ Item {
     property var xmlLocale: Qt.locale('en_GB')
     property var additionalWeatherInfo: {}
 
+
     property string overviewImageSource
     property string creditLink
     property string creditLabel
@@ -58,6 +60,100 @@ Item {
     property int reloadIntervalMin: plasmoid.configuration.reloadIntervalMin   // Download Attempt Frequency in minutes
     property int reloadIntervalMs: reloadIntervalMin * 60 * 1000               // Download Attempt Frequency in milliseconds
 
+    // === SUNRISE/SUNSET API MANAGER ===
+
+    property string sunriseSunsetUrl: "https://api.sunrise-sunset.org/json?lat=" + latitude + "&lng=" + longitude + "&formatted=0"
+    property real latitude: 0
+    property real longitude: 0
+    property date localSunrise: new Date(0)
+    property date localSunset: new Date(0)
+    property bool hasSunData: false
+    property int lastSunUpdate: 0 // timestamp of last successful fetch
+
+    function fetchSunriseSunset() {
+        if (!plasmoid.configuration.useSunriseSunset) return
+
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", sunriseSunsetUrl, true)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText)
+                        if (data.status === "OK") {
+                            // Parse ISO8601 strings into Date objects
+                            var sunriseUTC = new Date(data.results.sunrise)
+                            var sunsetUTC = new Date(data.results.sunset)
+
+                            // Convert UTC to local time using timezoneOffset
+                            var offsetMs = timezoneOffset * 60 * 1000 // offset in milliseconds
+                            localSunrise = new Date(sunriseUTC.getTime() + offsetMs)
+                            localSunset = new Date(sunsetUTC.getTime() + offsetMs)
+
+                            // Log for debugging
+                            dbgprint("Sunrise: " + Qt.formatDateTime(localSunrise, Qt.DefaultLocaleShortDate))
+                            dbgprint("Sunset: " + Qt.formatDateTime(localSunset, Qt.DefaultLocaleShortDate))
+
+                            hasSunData = true
+                            lastSunUpdate = Date.now()
+
+                            // Trigger wallpaper and effect updates
+                            applyWallpaperWithBrightness()
+                            updateAdditionalWeatherInfoText()
+                        }
+                    } catch (e) {
+                        dbgprint("Error parsing sunrise/sunset API: " + e.message)
+                        hasSunData = false
+                    }
+                } else {
+                    dbgprint("Sunrise/sunset API request failed: " + xhr.status)
+                    hasSunData = false
+                }
+            }
+        }
+        xhr.send()
+    }
+
+    // --- INITIALIZE LOCATION ---
+    Component.onCompleted: {
+        // Try to get location from system (if available)
+        var loc = PlasmaCore.LocationSource()
+        loc.start()
+        loc.onLocationChanged = function(location) {
+            if (location.latitude !== undefined && location.longitude !== undefined) {
+                latitude = location.latitude
+                longitude = location.longitude
+                dbgprint("Location acquired: " + latitude + ", " + longitude)
+                fetchSunriseSunset()
+            }
+        }
+
+        // Fallback: Use default location if none found (you can set this manually)
+        if (latitude === 0 && longitude === 0) {
+            // Example: Replace with your city's coordinates (get them from Google Maps)
+            latitude = 45.5089  // Portland, OR
+            longitude = -122.678
+            dbgprint("Using fallback coordinates: " + latitude + ", " + longitude)
+            fetchSunriseSunset()
+        }
+
+        // Update every 6 hours (21600000 ms), or when weather changes
+        Timer {
+            interval: 21600000 // 6 hours
+            repeat: true
+            running: true
+            onTriggered: {
+                if (hasSunData && Date.now() - lastSunUpdate > 3600000) { // Only if stale
+                    fetchSunriseSunset()
+                }
+            }
+        }
+
+        // Also trigger on weather change
+        if (currentProvider) {
+            currentProvider.onCurrentConditionChanged.connect(fetchSunriseSunset)
+        }
+    }
 
     property double lastloadingStartTime: 0       // Time download last attempted.
     property double lastloadingSuccessTime: 0     // Time download last successful.
@@ -106,6 +202,56 @@ Item {
     Plasmoid.preferredRepresentation: Plasmoid.compactRepresentation
     Plasmoid.compactRepresentation: cr
     Plasmoid.fullRepresentation: fr
+
+        // --- FEELS LIKE TEMPERATURE ---
+    property real feelsLikeTemp: {
+        var temp = actualWeatherModel.count > 0 ? actualWeatherModel.get(0).temperature : 0
+        var windSpeed = actualWeatherModel.count > 0 ? actualWeatherModel.get(0).windSpeedMps : 0
+        var humidity = actualWeatherModel.count > 0 ? actualWeatherModel.get(0).humidity : 0
+
+        // Wind chill (if temp < 10°C and wind > 3km/h)
+        var windChill = temp
+        if (temp <= 10 && windSpeed > 0.83) { // 3km/h ≈ 0.83m/s
+            windChill = 13.12 + 0.6215 * temp - 11.37 * Math.pow(windSpeed, 0.16) + 0.3965 * temp * Math.pow(windSpeed, 0.16)
+        }
+
+        // Humidity effect (if temp > 15°C)
+        var humidityEffect = 0
+        if (temp > 15 && humidity > 70) {
+            humidityEffect = (humidity - 70) / 10
+        }
+
+        return Math.round(windChill + humidityEffect)
+    }
+
+    // --- COMFORT LEVEL ---
+    property string comfortLevel: {
+        var temp = actualWeatherModel.count > 0 ? actualWeatherModel.get(0).temperature : 0
+        var windSpeed = actualWeatherModel.count > 0 ? actualWeatherModel.get(0).windSpeedMps : 0
+        var humidity = actualWeatherModel.count > 0 ? actualWeatherModel.get(0).humidity : 0
+
+        if (temp < 5) return "Freezing"
+        else if (temp < 10) return "Cold"
+        else if (temp < 15) return "Cool"
+        else if (temp < 20) return "Comfortable"
+        else if (temp < 25) return "Warm"
+        else if (temp < 30) return "Hot"
+        else return "Very Hot"
+    }
+
+    // --- WEATHER MOOD ---
+    property string weatherMood: {
+        var windSpeed = actualWeatherModel.count > 0 ? actualWeatherModel.get(0).windSpeedMps : 0
+        var cond = currentProvider ? currentProvider.currentCondition.toLowerCase() : ""
+
+        if (cond.includes("storm") || cond.includes("thunder")) return "Stormy"
+        else if (windSpeed > 15) return "Gusty"
+        else if (windSpeed > 8) return "Breezy"
+        else if (cond.includes("rain") || cond.includes("drizzle")) return "Wet"
+        else if (cond.includes("snow")) return "Snowy"
+        else if (cond.includes("cloudy") || cond.includes("overcast")) return "Overcast"
+        else return "Calm"
+    }
 
     property bool debugLogging: plasmoid.configuration.debugLogging
 
@@ -385,13 +531,52 @@ Item {
         plasmoid.status = DataLoader.getPlasmoidStatus(lastloadingSuccessTime, inTrayActiveTimeoutSec)
     }
 
+
     function updateAdditionalWeatherInfoText() {
-        if (additionalWeatherInfo !== undefined) {
-            var sunRise = UnitUtils.convertDate(additionalWeatherInfo.sunRise, timezoneType, timezoneOffset)
-            var sunSet = UnitUtils.convertDate(additionalWeatherInfo.sunSet, timezoneType, timezoneOffset)
-            additionalWeatherInfo.sunRiseTime = Qt.formatTime(sunRise, Qt.locale().timeFormat(Locale.ShortFormat))
-            additionalWeatherInfo.sunSetTime = Qt.formatTime(sunSet, Qt.locale().timeFormat(Locale.ShortFormat))
+        if (additionalWeatherInfo === undefined || additionalWeatherInfo.nearFutureWeather.iconName === null || actualWeatherModel.count === 0) {
+            dbgprint('model not yet ready')
+            return
         }
+
+        // Update sunrise/sunset times if available
+        if (hasSunData) {
+            additionalWeatherInfo.sunRise = localSunrise
+            additionalWeatherInfo.sunSet = localSunset
+        }
+
+        var sunRise = UnitUtils.convertDate(additionalWeatherInfo.sunRise, timezoneType, timezoneOffset)
+        var sunSet = UnitUtils.convertDate(additionalWeatherInfo.sunSet, timezoneType, timezoneOffset)
+        additionalWeatherInfo.sunRiseTime = Qt.formatTime(sunRise, Qt.locale().timeFormat(Locale.ShortFormat))
+        additionalWeatherInfo.sunSetTime = Qt.formatTime(sunSet, Qt.locale().timeFormat(Locale.ShortFormat))
+
+        var nearFutureWeather = additionalWeatherInfo.nearFutureWeather
+        var futureWeatherIcon = IconTools.getIconCode(nearFutureWeather.iconName, currentProvider.providerId, getPartOfDayIndex())
+        var wind1 = Math.round(actualWeatherModel.get(0).windDirection)
+        var windDirectionIcon = IconTools.getWindDirectionIconCode(wind1)
+        var subText = ''
+        subText += '<br /><font size="4" style="font-family: weathericons;">' + windDirectionIcon + '</font><font size="4"> ' + wind1 + '\u00B0 &nbsp; @ ' + UnitUtils.getWindSpeedText(actualWeatherModel.get(0).windSpeedMps, windSpeedType) + '</font>'
+        subText += '<br /><font size="4">' + UnitUtils.getPressureText(actualWeatherModel.get(0).pressureHpa, pressureType) + '</font>'
+        subText += '<br /><table>'
+        if ((actualWeatherModel.get(0).humidity !== undefined) && (actualWeatherModel.get(0).cloudiness !== undefined)) {
+            subText += '<tr>'
+            subText += '<td><font size="4"><font style="font-family: weathericons">\uf07a</font>&nbsp;' + actualWeatherModel.get(0).humidity + '%</font></td>'
+            subText += '<td><font size="4"><font style="font-family: weathericons">\uf013</font>&nbsp;' + actualWeatherModel.get(0).cloudiness + '%</font></td>'
+            subText += '</tr>'
+            subText += '<tr><td>&nbsp;</td><td></td></tr>'
+        }
+        subText += '<tr>'
+        subText += '<td><font size="4"><font style="font-family: weathericons">\uf051</font>&nbsp;' + additionalWeatherInfo.sunRiseTime + ' '+timezoneShortName + '&nbsp;&nbsp;&nbsp;</font></td>'
+        subText += '<td><font size="4"><font style="font-family: weathericons">\uf052</font>&nbsp;' + additionalWeatherInfo.sunSetTime + ' '+timezoneShortName + '</font></td>'
+        subText += '</tr>'
+        subText += '</table>'
+
+        subText += '<br /><br />'
+        subText += '<font size="3">' + i18n("near future") + '</font>'
+        subText += '<b>'
+        subText += '<font size="6">&nbsp;&nbsp;&nbsp;' + UnitUtils.getTemperatureNumber(nearFutureWeather.temperature, temperatureType) + UnitUtils.getTemperatureEnding(temperatureType)
+        subText += '&nbsp;&nbsp;&nbsp;<font style="font-family: weathericons">' + futureWeatherIcon + '</font></font>'
+        subText += '</b>'
+        tooltipSubText = subText
     }
 
     function refreshTooltipSubText() {
@@ -544,5 +729,478 @@ Item {
 
     function getLocalTimeZone() {
         return dataSource.data["Local"]["Timezone Abbreviation"]
+    }
+
+    // === HOVER FEELS LIKE TOOLTIP ===
+    Item {
+        id: feelsLikeTooltip
+        width: 180
+        height: 80
+        visible: false
+        z: 2000 // Always on top
+        opacity: 0
+        property real targetX: 0
+        property real targetY: 0
+
+        // Background with subtle blur
+        Rectangle {
+            anchors.fill: parent
+            color: textColorLight ? "#111111" : "#eeeeee"
+            radius: 12
+            border.color: textColorLight ? "#333333" : "#dddddd"
+            border.width: 1
+            opacity: 0.95
+
+            // Subtle inner glow for depth
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                color: "transparent"
+                border.color: textColorLight ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"
+                border.width: 1
+                radius: 11
+            }
+        }
+
+        // Text content
+        Column {
+            anchors.centerIn: parent
+            spacing: 2
+            Text {
+                text: i18n("Feels like %1°", atmosphereWidget.feelsLikeTemp)
+                font.pixelSize: widgetFontSize * 0.75
+                color: textColorLight ? "#ffffff" : "#111111"
+                font.bold: true
+            }
+            Text {
+                text: atmosphereWidget.comfortLevel + " • " + atmosphereWidget.weatherMood
+                font.pixelSize: widgetFontSize * 0.65
+                color: textColorLight ? "#cccccc" : "#555555"
+            }
+        }
+
+        // Animation: Fade in/out
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.InOutQuad
+            }
+        }
+
+        // Position: Centered above the temperature display
+        x: atmosphereWidget.temperatureLabel.x + (atmosphereWidget.temperatureLabel.width - width) / 2
+        y: atmosphereWidget.temperatureLabel.y - height - 10
+
+        // Hide by default
+        Component.onCompleted: {
+            visible = false
+            opacity = 0
+        }
+    }
+
+    // --- MOUSE AREA TO TRIGGER TOOLTIP ---
+    MouseArea {
+        id: tempHoverArea
+        anchors.fill: temperatureLabel // <-- This assumes your main temp label is named 'temperatureLabel'
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+
+        onEntered: {
+            feelsLikeTooltip.visible = true
+            feelsLikeTooltip.opacity = 1
+        }
+
+        onExited: {
+            feelsLikeTooltip.opacity = 0
+            setTimeout(function() {
+                feelsLikeTooltip.visible = false
+            }, 250)
+        }
+    }
+    // === ATMOSPHERE WIDGET (ALL-IN-ONE) ===
+    Item {
+        id: atmosphereWidget
+        anchors.fill: parent
+        z: 1002 // Highest layer — above everything
+
+        // --- SOUND EFFECTS ---
+        property bool soundEnabled: plasmoid.configuration.soundEffectsEnabled !== false
+        property string soundDir: "qrc:/sounds/"
+
+        SoundEffect {
+            id: hourlyDing
+            source: soundDir + "ding.mp3"
+            volume: 0.3
+            enabled: atmosphereWidget.soundEnabled
+        }
+
+        SoundEffect {
+            id: windWhoosh
+            source: soundDir + "wind.mp3"
+            volume: 0.2
+            enabled: atmosphereWidget.soundEnabled
+        }
+
+        SoundEffect {
+            id: rainPatter
+            source: soundDir + "rain.mp3"
+            volume: 0.25
+            enabled: atmosphereWidget.soundEnabled
+        }
+
+        SoundEffect {
+            id: snowCrunch
+            source: soundDir + "snow.mp3"
+            volume: 0.2
+            enabled: atmosphereWidget.soundEnabled
+        }
+
+        // --- WALLPAPER PATHS (USE YOUR EXACT PATHS) ---
+        property string morningWallpaper: "/home/x2/Wallpapers/System-Defaults/fruitdark.jpg"
+        property string afternoonWallpaper: "/home/x2/Wallpapers/System-Defaults/fruit.jpg"
+        property string eveningWallpaper: "/home/x2/Wallpapers/System-Defaults/fruitdarker.jpg"
+        property string nightWallpaper: "/home/x2/Wallpapers/System-Defaults/fruitdarkest.jpg"
+
+        // --- BASE IMAGE FOR BRIGHTNESS ADJUSTMENT ---
+        property string baseWallpaper: afternoonWallpaper // Use brightest as base for modulate
+
+        // --- CALCULATE TIME-BASED WALLPAPER ---
+
+        property string selectedWallpaper: {
+            var now = new Date().getTime()
+            var useSun = plasmoid.configuration.useSunriseSunset && hasSunData
+
+            if (useSun && localSunrise.getTime() > 0 && localSunset.getTime() > 0) {
+                var sunrise = localSunrise.getTime()
+                var sunset = localSunset.getTime()
+
+                // Morning: 1 hour before sunrise → 1 hour after sunrise
+                if (now > sunrise - 3600000 && now < sunrise + 3600000) return morningWallpaper
+                // Day: between sunrise + 1h and sunset - 1h
+                else if (now > sunrise + 3600000 && now < sunset - 3600000) return afternoonWallpaper
+                // Evening: 1 hour before sunset → 1 hour after sunset
+                else if (now > sunset - 3600000 && now < sunset + 3600000) return eveningWallpaper
+                // Night: everything else
+                else return nightWallpaper
+            }
+
+            // Fallback to time-based if API fails or disabled
+            var hour = new Date().getHours()
+            if (hour >= 6 && hour < 12) return morningWallpaper
+            else if (hour >= 12 && hour < 17) return afternoonWallpaper
+            else if (hour >= 17 && hour < 20) return eveningWallpaper
+            else return nightWallpaper
+        }
+
+        // --- CALCULATE BRIGHTNESS (TIME + WEATHER) ---
+        property real calculatedBrightness: {
+        var now = new Date().getTime()
+        var useSun = plasmoid.configuration.useSunriseSunset && hasSunData
+
+        if (useSun && localSunrise.getTime() > 0 && localSunset.getTime() > 0) {
+            var sunrise = localSunrise.getTime()
+            var sunset = localSunset.getTime()
+            var dayLength = sunset - sunrise
+            var timeSinceSunrise = now - sunrise
+
+            if (timeSinceSunrise < 0) return 20  // Before sunrise
+            if (timeSinceSunrise > dayLength) return 20  // After sunset
+
+            // Linear interpolation: darkest at sunrise/sunset, brightest at noon
+            var progress = Math.max(0, Math.min(1, timeSinceSunrise / dayLength))
+            var base = 100 * (1 - Math.abs(progress - 0.5) * 2) // Triangle wave: peaks at noon
+            return Math.round(base)
+        }
+
+        // Fallback to time-based brightness (from your original script)
+        var hour = new Date().getHours()
+        var brightness_levels = {
+            0: 20, 1: 30, 2: 35, 3: 40, 4: 45, 5: 50,
+            6: 60, 7: 70, 8: 80, 9: 85, 10: 90, 11: 95,
+            12: 100, 13: 100, 14: 95, 15: 90, 16: 85, 17: 80,
+            18: 70, 19: 60, 20: 50, 21: 40, 22: 30, 23: 25
+        }
+        var base = brightness_levels[hour] || 40
+
+        // Weather adjustment
+        var cond = currentProvider ? currentProvider.currentCondition.toLowerCase() : ""
+        var weatherAdj = 0
+        if (cond.includes("snow")) weatherAdj = 15
+        else if (cond.includes("sun") || cond.includes("clear")) weatherAdj = 10
+        else if (cond.includes("rain") || cond.includes("drizzle")) weatherAdj = -20
+        else if (cond.includes("cloudy") || cond.includes("overcast")) weatherAdj = -15
+
+        return Math.max(15, Math.min(100, base + weatherAdj))
+    }
+
+        // --- WALLPAPER ADJUSTMENT FUNCTION ---
+        function applyWallpaperWithBrightness() {
+            var path = selectedWallpaper
+            if (!Qt.canOpenFile(path)) {
+                console.warn("Wallpaper not found:", path)
+                return
+            }
+
+            var tempPath = Qt.resolvedUrl("file:///tmp/plasma-adjusted-wallpaper-" + plasmoid.id + ".jpg")
+
+            if (calculatedBrightness === 100) {
+                setPlasmaWallpaper(path)
+            } else {
+                var cmd = "convert \"" + path + "\" -modulate 100," + calculatedBrightness + ",100 \"" + tempPath + "\""
+                var process = new QtObject()
+                process.execute = function(command) {
+                    var result = Qt.runCommand(command)
+                    return result
+                }
+                process.execute(cmd)
+
+                setTimeout(function() {
+                    if (Qt.fileExists(tempPath)) {
+                        setPlasmaWallpaper(tempPath)
+                    } else {
+                        setPlasmaWallpaper(path)
+                    }
+                }, 1000)
+            }
+        }
+
+        // --- SET WALLPAPER VIA DBUS ---
+        function setPlasmaWallpaper(path) {
+            if (!path) return
+
+            var escapedPath = path.replace(/"/g, '\\"')
+            var script = `
+                var allDesktops = desktops();
+                for (i=0; i<allDesktops.length; i++) {
+                    d = allDesktops[i];
+                    d.wallpaperPlugin = 'org.kde.image';
+                    d.currentConfigGroup = Array('Wallpaper', 'org.kde.image', 'General');
+                    d.writeConfig('Image', 'file://${escapedPath}');
+                }
+            `
+
+            try {
+                qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript(script)
+                console.log("Wallpaper updated:", path, "brightness:", calculatedBrightness)
+            } catch (e) {
+                console.error("DBus wallpaper error:", e.message)
+            }
+        }
+
+        // --- SUN GLINT (GENTLE HIGHLIGHT ON SUNNY DAYS) ---
+        Item {
+            id: sunGlint
+            width: 40
+            height: 40
+            radius: 20
+            color: "white"
+            opacity: 0
+            z: 1003
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            visible: !currentProvider ? false : (
+                !currentProvider.currentCondition.toLowerCase().includes("cloud") &&
+                !currentProvider.currentCondition.toLowerCase().includes("rain") &&
+                !currentProvider.currentCondition.toLowerCase().includes("snow") &&
+                calculatedBrightness > 85
+            )
+
+            Behavior on opacity { NumberAnimation { duration: 1500 } }
+
+            SequentialAnimation on x {
+                loops: Animation.Infinite
+                running: visible
+                PropertyAnimation { to: parent.width / 2 - 20; duration: 4000 }
+                PropertyAnimation { to: parent.width / 2 + 20; duration: 4000 }
+            }
+
+            Timer {
+                interval: 3000
+                repeat: true
+                running: visible
+                onTriggered: {
+                    opacity = 0.9
+                    setTimeout(() => opacity = 0, 600)
+                }
+            }
+        }
+
+        // --- RAIN AND SNOW PARTICLES WITH WIND ALIGNMENT ---
+        property real windDirection: actualWeatherModel.count > 0 ? actualWeatherModel.get(0).windDirection : 0
+
+        Item {
+            id: rainContainer
+            anchors.fill: parent
+            rotation: windDirection - 90
+            visible: currentProvider && (
+                currentProvider.currentCondition.toLowerCase().includes("rain") ||
+                currentProvider.currentCondition.toLowerCase().includes("drizzle")
+            )
+
+            ParticleSystem {
+                id: rainSystem
+                width: parent.width
+                height: parent.height
+
+                ImageParticle {
+                    source: "qrc:/effects/raindrop.svg"
+                    colorVariation: 0.1
+                    alpha: 0.7
+                    size: 8
+                    sizeVariation: 3
+                    lifeSpan: 1500
+                    velocityFromAngle: 90
+                    velocityFromMagnitude: 110 + (actualWeatherModel.count > 0 ? actualWeatherModel.get(0).windSpeedMps * 8 : 0)
+                    velocityVariation: 30
+                }
+
+                Emitter {
+                    anchors.fill: parent
+                    emitRate: 150
+                    lifeSpan: 1500
+                    lifeSpanVariation: 200
+                }
+            }
+        }
+
+        Item {
+            id: snowContainer
+            anchors.fill: parent
+            rotation: windDirection - 90
+            visible: currentProvider && (
+                currentProvider.currentCondition.toLowerCase().includes("snow") ||
+                currentProvider.currentCondition.toLowerCase().includes("sleet")
+            )
+
+            ParticleSystem {
+                id: snowSystem
+                width: parent.width
+                height: parent.height
+
+                ImageParticle {
+                    source: "qrc:/effects/snowflake.svg"
+                    color: "#ffffff"
+                    alpha: 0.9
+                    size: 12
+                    sizeVariation: 4
+                    lifeSpan: 4000
+                    velocityFromAngle: 90
+                    velocityFromMagnitude: 15 + (actualWeatherModel.count > 0 ? actualWeatherModel.get(0).windSpeedMps * 2 : 0)
+                    velocityVariation: 30
+                    rotationSpeed: 100
+                    rotationSpeedVariation: 50
+                }
+
+                Emitter {
+                    anchors.fill: parent
+                    emitRate: 60
+                    lifeSpan: 4000
+                    lifeSpanVariation: 500
+                }
+            }
+        }
+
+        // --- DAY/NIGHT OVERLAY (SOFT DIMMING) ---
+        Rectangle {
+            id: lightingOverlay
+            anchors.fill: parent
+            color: "black"
+            opacity: 0
+            z: 1001
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 3000
+                    easing.type: Easing.InOutQuad
+                }
+            }
+
+            opacity: {
+                var cond = currentProvider ? currentProvider.currentCondition.toLowerCase() : ""
+                var hour = new Date().getHours()
+
+                if (cond.includes("snow")) return 0.5
+                else if (cond.includes("rain") || cond.includes("drizzle")) return 0.4
+                else if (cond.includes("cloudy") || cond.includes("overcast")) return 0.3
+                else if (hour >= 18 || hour < 6) return 0.6
+                else return 0.0
+            }
+        }
+
+        // --- SOUND TRIGGERS ---
+        function playSound(soundName) {
+            if (!atmosphereWidget.soundEnabled) return
+
+            switch (soundName) {
+                case "ding": hourlyDing.play(); break
+                case "wind": windWhoosh.play(); break
+                case "rain": rainPatter.play(); break
+                case "snow": snowCrunch.play(); break
+            }
+        }
+
+        // --- UPDATE LOGIC ---
+        Component.onCompleted: {
+            // Load sounds from resource if they exist
+            var soundFiles = ["ding.mp3", "wind.mp3", "rain.mp3", "snow.mp3"]
+            soundFiles.forEach(file => {
+                if (!Qt.resourceExists(atmosphereWidget.soundDir + file)) {
+                    console.warn("Sound file missing:", atmosphereWidget.soundDir + file)
+                }
+            })
+
+            // Initial wallpaper update
+            applyWallpaperWithBrightness()
+
+            // Update every minute (for time changes)
+            Timer {
+                interval: 60 * 1000
+                repeat: true
+                running: true
+                onTriggered: {
+                    applyWallpaperWithBrightness()
+
+                    // Play ding on the hour
+                    var now = new Date()
+                    if (now.getMinutes() === 0) {
+                        playSound("ding")
+                    }
+
+                    // Trigger wind sound on high wind
+                    if (actualWeatherModel.count > 0) {
+                        var windSpeed = actualWeatherModel.get(0).windSpeedMps
+                        if (windSpeed > 7) {
+                            playSound("wind")
+                        }
+                    }
+                }
+            }
+
+            // Watch weather condition changes
+            if (currentProvider) {
+                currentProvider.onCurrentConditionChanged.connect(function() {
+                    var cond = currentProvider.currentCondition.toLowerCase()
+                    if (cond.includes("rain") && !rainContainer.visible) playSound("rain")
+                    if (cond.includes("snow") && !snowContainer.visible) playSound("snow")
+                    applyWallpaperWithBrightness()
+                })
+            }
+
+            // Watch wind speed/direction changes
+            actualWeatherModel.onDataChanged.connect(function() {
+                if (actualWeatherModel.count > 0) {
+                    windDirection = actualWeatherModel.get(0).windDirection
+                    var windSpeed = actualWeatherModel.get(0).windSpeedMps
+                    if (windSpeed > 7) {
+                        playSound("wind")
+                    }
+                }
+            })
+
+            // Ensure we get initial wind direction
+            if (actualWeatherModel.count > 0) {
+                windDirection = actualWeatherModel.get(0).windDirection
+            }
+        }
     }
 }

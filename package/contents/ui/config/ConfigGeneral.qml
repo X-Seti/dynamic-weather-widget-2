@@ -626,9 +626,21 @@ Item {
         }
     }
 
-    ColumnLayout{
+        ColumnLayout{
         id: rhsColumn
         width: parent.width
+        PlasmaComponents.Switch {
+        id: soundSwitch
+        text: i18n("Enable Ambient Sounds")
+        checked: plasmoid.configuration.soundEffectsEnabled
+        onCheckedChanged: plasmoid.configuration.soundEffectsEnabled = checked
+        }
+        PlasmaComponents.Switch {
+            id: sunSwitch
+            text: i18n("Use Sunrise/Sunset Times")
+            checked: plasmoid.configuration.useSunriseSunset
+            onCheckedChanged: plasmoid.configuration.useSunriseSunset = checked
+        }
 
         Label {
             text: i18n("Plasmoid version:") + ' 2.3.4'

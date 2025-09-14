@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/effects">
+        <file>raindrop.svg</file>
+        <file>snowflake.svg</file>
+    </qresource>
+    <qresource prefix="/sounds">
+        <file>sounds/ding.mp3</file>
+        <file>sounds/hover.mp3</file>
+        <file>sounds/rain.mp3</file>
+        <file>sounds/snow.mp3</file>
+        <file>sounds/wind.mp3</file>
+    </qresource>
+</RCC>
