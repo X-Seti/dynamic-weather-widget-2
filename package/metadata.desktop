@@ -7,6 +7,7 @@ X-KDE-ServiceTypes=Plasma/Applet
 X-Plasma-API=declarativeappletscript
 X-Plasma-MainScript=ui/main.qml
 X-Plasma-NotificationArea=true
+X-Plasma-ResourceFiles=effects/resources.qrc
 X-KDE-PluginInfo-Category=Environment and Weather
 X-KDE-ParentApp=
 X-KDE-PluginInfo-Author=Kate Buckley
