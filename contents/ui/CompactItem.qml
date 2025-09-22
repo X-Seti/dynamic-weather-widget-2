@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015  Martin Kotelnik <clearmartin@seznam.cz>
  *
  * This program is free software; you can redistribute it and/or
@@ -14,161 +14,174 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http: //www.gnu.org/licenses/>.
  */
-import QtQuick 2.2
-import QtQuick.Layouts 1.1
-import QtGraphicalEffects 1.0
-import org.kde.plasma.components 2.0 as PlasmaComponents
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.components 3.0 as PlasmaComponents
 import org.kde.plasma.core 2.0 as PlasmaCore
+import Qt5Compat.GraphicalEffects
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 import "../code/icons.js" as IconTools
 import "../code/unit-utils.js" as UnitUtils
 
-Item {
-    id: compactItem
+GridLayout {
+    id: iconAndText
 
     anchors.fill: parent
 
-    property bool inTray
-    property int layoutType: inTray ? 2 : main.layoutType
-    property string widgetFontName: main.widgetFontName
-    property string widgetFontSize: main.widgetFontSize
+    property bool vertical: main.vertical
 
-    property double parentWidth: parent.width
-    property double parentHeight: parent.height
+    property int layoutType: main.layoutType
+    property int iconSizeMode: main.iconSizeMode
+    property int textSizeMode: plasmoid.configuration.textSizeMode
+    property int leftOuterMargin: plasmoid.configuration.leftOuterMargin
+    property int rightOuterMargin: plasmoid.configuration.rightOuterMargin
+    property int innerMargin: plasmoid.configuration.innerMargin
+    property int topOuterMargin: plasmoid.configuration.topOuterMargin
+    property int bottomOuterMargin: plasmoid.configuration.bottomOuterMargin
 
+    property bool iconVisible: plasmoid.configuration.iconVisible
+    property bool textVisible: plasmoid.configuration.textVisible
 
-    property double partWidth: 0
-    property double partHeight: 0
+    property int widgetFontSize: plasmoid.configuration.widgetFontSize
+    property int widgetIconSize: plasmoid.configuration.widgetIconSize
+    property string widgetFontName: (plasmoid.configuration.widgetFontName === "") ? Kirigami.Theme.defaultFont.family : plasmoid.configuration.widgetFontName
+    property bool textDropShadow: plasmoid.configuration.textDropShadow
+    property bool iconDropShadow: plasmoid.configuration.iconDropShadow
 
-    property double widgetWidth: 0
-    property double widgetHeight: 0
+    property string iconNameStr: main.iconNameStr.length > 0 ? main.iconNameStr : "\uf07b"
+    property string temperatureStr: main.temperatureStr.length > 0 ? main.temperatureStr : "--"
 
-    onParentWidthChanged: {
-        dbgprint("onParentWidthChanged")
-        computeWidgetSize()
-    }
+    uniformCellHeights: layoutType === 1 && iconAndText.vertical
 
-    onParentHeightChanged: {
-        dbgprint("onParentHeightChanged")
-        computeWidgetSize()
+    columnSpacing: iconVisible && textVisible ? (iconAndText.vertical && layoutType === 0 ? innerMargin + 3 : layoutType === 0 ? innerMargin + 8 : iconAndText.vertical && layoutType === 1 ? innerMargin - 1 : iconAndText.vertical ? innerMargin - 17 : layoutType === 2 ? innerMargin - 13 : innerMargin) : innerMargin
+    rowSpacing: layoutType === 1 ? innerMargin - 2 : 0
+
+    rows: (layoutType === 1) ? 2 : 1
+    columns: (layoutType === 1) ? 1 : 2
+
+    function reLayout() {
+        temperatureText.anchors.left = [compactWeatherIcon.left, compactItem.left, undefined][layoutType]
+        temperatureText.anchors.right = [compactItem.right, compactItem.right, compactItem.right][layoutType]
+        temperatureText.anchors.top = [compactItem.top, undefined, temperatureText.top][layoutType]
+        temperatureText.anchors.bottom = [compactItem.bottom, compactItem.bottom, compactItem.bottom][layoutType]
+
+        compactWeatherIcon.anchors.left = [compactItem.left, compactItem.left, compactItem.left][layoutType]
+        compactWeatherIcon.anchors.right = [undefined, compactItem.right, compactItem.right][layoutType]
+        compactWeatherIcon.anchors.top = [compactItem.top, compactItem.top, compactItem.top][layoutType]
+        compactWeatherIcon.anchors.bottom = [compactItem.bottom, compactWeatherIcon.bottom, compactItem.bottom][layoutType]
     }
 
     onLayoutTypeChanged: {
-        computeWidgetSize()
+        reLayout()
     }
 
-    function computeWidgetSize() {
-        if ((parentWidth > 0) && (parentHeight > 0)) {
-            setDebugFlag(false)
-            dbgprint("Widget ParentSize = " + parent.width + "x" + parent.height)
-            if (layoutType === 0) {
-                partWidth = vertical ? parentWidth / 2 : parentHeight
-                partHeight = parentHeight
-                widgetWidth = partWidth * 2
-                widgetHeight = partHeight
-            } else if (layoutType === 1) {
-                partWidth = vertical ? parentWidth / 2 : parentWidth / 2
-                partHeight = vertical ? parentWidth  : parentHeight / 2
-                widgetWidth = partWidth
-                widgetHeight = partHeight * 2
-            } else if (layoutType === 2) {
-                partWidth = vertical ? parentWidth : parentHeight
-                partHeight = partWidth
-                widgetWidth = partWidth
-                widgetHeight = partHeight
+    Item {
+        // Otherwise it takes up too much space while loading
+        visible: compactWeatherIcon.text.length > 0
+
+        Layout.alignment: Qt.AlignCenter
+
+        Layout.fillWidth: iconAndText.vertical
+        Layout.fillHeight: !iconAndText.vertical
+        Layout.minimumWidth: iconVisible ? (iconAndText.vertical ? 0 : compactWeatherIcon.paintedWidth) : 0
+        Layout.maximumWidth: iconAndText.vertical ? Infinity : Layout.minimumWidth
+
+        Layout.minimumHeight: iconVisible ? (iconAndText.vertical ? compactWeatherIcon.paintedHeight : 0) : 0
+        Layout.maximumHeight: iconAndText.vertical ? Layout.minimumHeight : Infinity
+
+        Layout.leftMargin: layoutType === 1 ? (iconAndText.vertical ? Kirigami.Units.smallSpacing + leftOuterMargin - 1 : Kirigami.Units.smallSpacing + leftOuterMargin - 6) : iconAndText.vertical ? (layoutType === 2 ? Kirigami.Units.smallSpacing + leftOuterMargin - 1 : Kirigami.Units.smallSpacing + leftOuterMargin - 3) : layoutType === 2 ? (iconAndText.height > 21 ? leftOuterMargin + 1 : leftOuterMargin + 1) : leftOuterMargin
+
+        Layout.topMargin: iconAndText.vertical ? (layoutType === 1 ? topOuterMargin + 1 : layoutType === 2 ? topOuterMargin : topOuterMargin) : layoutType === 1 ? topOuterMargin - 2 : layoutType === 2 ? topOuterMargin : iconAndText.height < 22 ? topOuterMargin + 1 : topOuterMargin
+
+        Layout.rightMargin: layoutType === 1 ? (iconAndText.vertical ? rightOuterMargin + 3 : rightOuterMargin) :  undefined
+
+        Layout.bottomMargin: iconAndText.vertical && layoutType === 2 ? bottomOuterMargin + 5 : layoutType === 2 ? bottomOuterMargin - 1 : iconAndText.vertical && layoutType === 0 ? bottomOuterMargin - 1 : layoutType === 0 ? bottomOuterMargin : undefined
+        // Layout.bottomMargin: !(layoutType === 1) ? bottomOuterMargin - 1 : iconAndTextVertical && layoutType === 2 ? bottomOuterMargin + 5 : undefined
+
+        PlasmaComponents.Label {
+            id: compactWeatherIcon
+            visible: plasmoid.configuration.iconVisible
+            font {
+                weight: Font.Normal
+                family: 'weathericons'
+                pixelSize: widgetIconSize
+                pointSize: 0 // we need to unset pointSize otherwise it breaks the Text.Fit size mode
             }
-            dbgprint("Individual WidgetSize  = " + partWidth + "x" + partHeight)
-            dbgprint("Combined WidgetSize = " + widgetWidth + "x" + widgetHeight)
-            compactRepresentation.Layout.preferredHeight = widgetHeight
-            compactRepresentation.Layout.preferredWidth = widgetWidth
-            compactRepresentation.Layout.maximumWidth - widgetWidth
-            setDebugFlag(false)
+            minimumPixelSize: Math.round(Kirigami.Units.gridUnit / 2)
+            fontSizeMode: iconSizeMode === 0 ? (iconAndText.vertical ? Text.HorizontalFit : Text.VerticalFit) : Text.FixedSize
+            wrapMode: Text.NoWrap
+            verticalAlignment: iconAndText.vertical && layoutType === 1 ? Text.AlignTop : layoutType === 2 ? Text.AlignTop : Text.AlignVCenter
+            horizontalAlignment: Text.AlignHCenter
+            text: iconNameStr
+            anchors.fill: parent
         }
-    }
 
-
-
-    property double fontPixelSize: partHeight * (layoutType === 2 ? 0.7 : 0.7)
-
-    property string iconNameStr:    actualWeatherModel.count > 0 ? IconTools.getIconCode(actualWeatherModel.get(0).iconName, currentProvider.providerId, getPartOfDayIndex()) : ''
-    property string temperatureStr: actualWeatherModel.count > 0 ? UnitUtils.getTemperatureNumberExt(actualWeatherModel.get(0).temperature, temperatureType) : ''
-
-    PlasmaComponents.Label {
-
-        anchors.left: parent.left
-        anchors.leftMargin: layoutType === 0 ? partWidth : 0
-        anchors.top: parent.top
-        anchors.topMargin: layoutType === 1 ? partHeight : 0
-
-        width: partWidth
-        height: partHeight
-
-        horizontalAlignment: layoutType === 2 ? Text.AlignLeft : Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        fontSizeMode: ((layoutType === 2) || (layoutType===0 && main.vertical)) ? Text.Fit : Text.FixedSize
-
-        font.family: 'weathericons'
-        text: iconNameStr
-
-        opacity: layoutType === 2 ? 0.8 : 1
-
-        font.pixelSize: fontPixelSize
-        font.pointSize: -1
-    }
-
-    PlasmaComponents.Label {
-        id: temperatureText
-
-        anchors.left: parent.left
-        anchors.leftMargin: layoutType === 2 ? partWidth * 0.25 : 0
-        anchors.top: parent.top
-        anchors.topMargin: 0
-        width: layoutType === 2 ? partWidth * 0.75 : partWidth
-        height: partHeight
-
-        horizontalAlignment: layoutType === 1 ? Text.AlignHCenter : Text.AlignRight
-        verticalAlignment: layoutType === 2 ? Text.AlignBottom : Text.AlignVCenter
-
-        text: temperatureStr
-
-        font.family: plasmoid.configuration.widgetFontName === "" ? (theme.defaultFont) : plasmoid.configuration.widgetFontName
-        font.pixelSize: layoutType === 2 ? widgetFontSize * 0.7 : widgetFontSize
-        font.pointSize: -1
-        fontSizeMode: ((! vertical) && (layoutType === 1)) ? Text.VerticalFit : Text.HorizontalFit
-    }
-
-    DropShadow {
-        anchors.fill: temperatureText
-        radius: 3
-        samples: 16
-        spread: 0.8
-        fast: true
-        color: theme.backgroundColor
-        source: temperatureText
-        visible: layoutType === 2
-    }
-
-    PlasmaComponents.BusyIndicator {
-        id: busyIndicator
-        anchors.fill: parent
-        visible: false
-        running: false
-    }
-
-    states: [
-        State {
-            name: 'loading'
-            when: loadingData
-
-            PropertyChanges {
-                target: busyIndicator
-                visible: true
-                running: true
-            }
-
-            PropertyChanges {
-                target: compactItem
-                opacity: 0.5
-            }
+        DropShadow {
+            anchors.fill: compactWeatherIcon
+            radius: 3
+            samples: 16
+            spread: 0.8
+            fast: true
+            color: Kirigami.Theme.backgroundColor
+            source: compactWeatherIcon
+            visible: iconVisible ? plasmoid.configuration.iconDropShadow : false
         }
-    ]
+
+    }
+
+    Item {
+        // Otherwise it takes up too much space while loading
+        visible: temperatureText.text.length > 0
+
+        Layout.alignment: layoutType === 2 ? Qt.AlignBottom : Qt.AlignCenter
+
+        Layout.fillWidth: iconAndText.vertical
+        Layout.fillHeight: !iconAndText.vertical
+        Layout.minimumWidth: textVisible ? (iconAndText.vertical ? 0 : temperatureText.paintedWidth) : 0
+        Layout.maximumWidth: iconAndText.vertical ? Infinity : Layout.minimumWidth
+
+        Layout.minimumHeight: textVisible ? (iconAndText.vertical ? temperatureText.paintedHeight : 0) : 0
+        Layout.maximumHeight: iconAndText.vertical ? Layout.minimumHeight : layoutType === 2 ? iconAndText.height * 0.69 : Infinity
+
+        Layout.rightMargin: iconAndText.vertical ? (layoutType === 1 ? rightOuterMargin + 2 : layoutType === 2 ? rightOuterMargin + 3 : rightOuterMargin + 1) : layoutType === 2 ? rightOuterMargin + 1 : rightOuterMargin + 1
+
+        Layout.bottomMargin: layoutType === 1 ? (iconAndText.vertical ? bottomOuterMargin - 4 : bottomOuterMargin - 1) : iconAndText.vertical ? (layoutType === 0 ? bottomOuterMargin - 2 : bottomOuterMargin) : layoutType === 0 ? (iconAndText.height < 22 ? bottomOuterMargin + 2 : bottomOuterMargin) :  iconAndText.height < 22 ? bottomOuterMargin + 1 : bottomOuterMargin + 1
+
+        Layout.leftMargin: layoutType === 1 ? (iconAndText.vertical ? leftOuterMargin + 3 : leftOuterMargin) :  undefined
+
+        Layout.topMargin: iconAndText.vertical && layoutType === 0 ? topOuterMargin - 1 : layoutType === 0 ? topOuterMargin : layoutType === 2 ? topOuterMargin : undefined
+        // Layout.topMargin: iconAndText.vertical && layoutType === 0 ? topOuterMargin - 1 : !(layoutType === 1) ? topOuterMargin : undefined
+
+        PlasmaComponents.Label {
+            id: temperatureText
+            visible: plasmoid.configuration.textVisible
+            font {
+                weight: Font.Normal
+                family: widgetFontName
+                pixelSize: widgetFontSize
+                pointSize: 0 // we need to unset pointSize otherwise it breaks the Text.Fit size mode
+            }
+            minimumPixelSize: Math.round(Kirigami.Units.gridUnit / 2)
+            fontSizeMode: textSizeMode === 0 ? (iconAndText.vertical ? Text.HorizontalFit : Text.VerticalFit) : Text.FixedSize
+            wrapMode: Text.NoWrap
+            verticalAlignment: (layoutType === 0) ? Text.AlignVCenter : Text.AlignBottom
+            horizontalAlignment: Text.AlignHCenter
+            text: temperatureStr
+            anchors.fill: parent
+        }
+
+        DropShadow {
+            anchors.fill: temperatureText
+            radius: 3
+            samples: 16
+            spread: 0.8
+            fast: true
+            color: Kirigami.Theme.backgroundColor
+            source: temperatureText
+            visible: textVisible ? plasmoid.configuration.textDropShadow : false
+        }
+
+    }
+
 }

@@ -14,59 +14,70 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http: //www.gnu.org/licenses/>.
  */
-import QtQuick 2.2
-import QtQuick.Layouts 1.1
-import QtGraphicalEffects 1.0
-import org.kde.plasma.plasmoid 2.0
+import QtQuick
+import org.kde.plasma.components 3.0 as PlasmaComponents
 import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 2.0 as PlasmaComponents
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
+import Qt5Compat.GraphicalEffects
+import org.kde.kirigami as Kirigami
 
-Item {
+
+Loader {
     id: compactRepresentation
 
     anchors.fill: parent
 
-    CompactItem {
+    readonly property bool vertical: (Plasmoid.formFactor == PlasmaCore.Types.Vertical)
+
+    property int defaultWidgetSize: -1
+    property int widgetOrder: main.widgetOrder
+    property int layoutType: main.layoutType
+
+    sourceComponent: layoutType === 2 ? compactItem : widgetOrder === 1 ? compactItemReverse : compactItem
+
+    Layout.fillWidth: compactRepresentation.vertical
+    Layout.fillHeight: !compactRepresentation.vertical
+    Layout.minimumWidth: item.Layout.minimumWidth
+    Layout.minimumHeight: item.Layout.minimumHeight
+
+    Component {
         id: compactItem
-        inTray: false
+        CompactItem {
+            vertical: compactRepresentation.vertical
+        }
     }
 
-    property bool isCompactLayout: main.layoutType === 2 ? true : false
-    // Layout.preferredWidth: ((! isCompactLayout ) && (plasmoid.formFactor === PlasmaCore.Types.Horizontal)) ? compactItem.height * 2 : compactItem.height
-    // Layout.preferredHeight: ((! isCompactLayout ) && (plasmoid.formFactor === PlasmaCore.Types.Vertical)) ? parent.width * 2 : parent.width
+    Component {
+        id: compactItemReverse
+        CompactItemReverse {
+            vertical: compactRepresentation.vertical
+        }
+    }
 
-    property double partHeight: compactItem.widgetHeight
-
-    PlasmaComponents.Label {
-        id: lastReloadedNotifier
-
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: - partHeight * 0.05
-        verticalAlignment: Text.AlignBottom
-        width: parent.width
-        fontSizeMode: Text.Fit
-
-        font.pixelSize: partHeight * 0.26 * (layoutType === 0 ? 1 : 0.7)
-        font.pointSize: -1
-        color: theme.highlightColor
-
-        text: lastReloadedText
-        wrapMode: Text.WordWrap
+    PlasmaComponents.BusyIndicator {
+        id: busyIndicator
+        anchors.fill: parent
         visible: false
-    }
+        running: false
 
-    DropShadow {
-        anchors.fill: lastReloadedNotifier
-        radius: 3
-        samples: 16
-        spread: 0.8
-        fast: true
-        color: theme.backgroundColor
-        source: lastReloadedNotifier
-        visible: (lastReloadedText.visible === true)
-    }
+        states: [
+            State {
+                name: 'loading'
+                when: !loadingDataComplete
 
+                PropertyChanges {
+                    target: busyIndicator
+                    visible: true
+                    running: true
+                }
+
+                PropertyChanges {
+                    target: compactItem
+                }
+            }
+        ]
+    }
 
     MouseArea {
         anchors.fill: parent
@@ -75,33 +86,31 @@ Item {
 
         hoverEnabled: true
 
-        onEntered: {
-            lastReloadedNotifier.visible = !plasmoid.expanded
-        }
-
-        onExited: {
-            lastReloadedNotifier.visible = false
-        }
-
-        onClicked: {
-            if (mouse.button == Qt.MiddleButton) {
-                main.reloadData()
+        onClicked: (mouse)=> {
+            if (mouse.button === Qt.MiddleButton) {
+                loadingData.failedAttemptCount = 0
+                main.loadDataFromInternet()
             } else {
-                plasmoid.expanded = !plasmoid.expanded
-                lastReloadedNotifier.visible = !plasmoid.expanded
+                main.expanded = !main.expanded
             }
         }
+
+        onEntered: main.refreshTooltipSubText()
 
         PlasmaCore.ToolTipArea {
             id: toolTipArea
             anchors.fill: parent
-            active: !plasmoid.expanded
+            active: !main.expanded
             interactive: true
-            mainText: placeAlias
-            subText: tooltipSubText
+            mainText: main.currentPlace.alias
+            subText:  main.toolTipSubText
             textFormat: Text.RichText
-            icon: Qt.resolvedUrl('../images/weather-widget.svg')
         }
     }
 
+    Component.onCompleted: {
+        if ((defaultWidgetSize === -1) && (compactRepresentation.width > 0 ||  compactRepresentation.height)) {
+            defaultWidgetSize = Math.min(compactRepresentation.width, compactRepresentation.height)
+        }
+    }
 }

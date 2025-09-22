@@ -5,7 +5,7 @@
       http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
     <kcfgfile name=""/>
 
-    <group name="General">
+    <group name="Location">
         <entry name="firstRun" type="Bool">
             <default>true</default>
         </entry>
@@ -15,44 +15,64 @@
         <entry name="places" type="String">
           <default>
           [
-            {"providerId": "metno", "placeIdentifier": "lat=52.63333&amp;lon=-1.13333&amp;altitude=65", "placeAlias": "Leicester, UK", "timezoneID": 159},
-            {"providerId": "owm", "placeIdentifier": "1609350", "placeAlias": "Bangkok, TH"},
-            {"providerId": "metno", "placeIdentifier": "lat=38.50245&amp;lon=-0.13044&amp;altitude=30", "placeAlias": "Benidorm, ES", "timezoneID": 146},
-            {"providerId": "metno", "placeIdentifier": "lat=25.30089&amp;lon=91.69619&amp;altitude=1505","placeAlias":"Cherrapunji, IN","timezoneID":192}
+          <!--{"providerId": "om", "placeIdentifier": "latitude=52.6333&amp;longitude=-1.1333&amp;altitude=65", "placeAlias": "Leicester, UK", "timezoneID": 159},-->
+          {"providerId": "om", "placeIdentifier": "latitude=49.2496&amp;longitude=-123.1193&amp;altitude=65", "placeAlias": "Vancouver, CA", "timezoneID": 109},
+          {"providerId": "owm", "placeIdentifier": "2644668", "placeAlias": "Leicester, UK (OWM)"},
+          {"providerId": "owm", "placeIdentifier": "5368361", "placeAlias": "Los Angeles, USA (OWM)"},
+          {"providerId": "metno", "placeIdentifier": "lat=13.7539&amp;lon=100.5014&amp;altitude=12", "placeAlias": "Bangkok, TH","timezoneID":360},
+          {"providerId": "metno", "placeIdentifier": "lat=25.3008&amp;lon=91.6961&amp;altitude=1505","placeAlias":"Cherrapunji, IN","timezoneID":192},
+          <!--{"providerId": "om", "placeIdentifier": "latitude=13.7539&amp;longitude=100.5014&amp;altitude=12", "placeAlias": "Bangkok, TH (OM)","timezoneID":360},-->
+          <!--{"providerId": "om", "placeIdentifier": "latitude=25.3008&amp;longitude=91.6961&amp;altitude=1505","placeAlias":"Cherrapunji, IN (OM)","timezoneID":192},-->
+          {"providerId": "om", "placeIdentifier": "latitude=38.5024&amp;longitude=-0.1304&amp;altitude=30", "placeAlias": "Benidorm, ES", "timezoneID":146}
+
           ]
         </default>
         </entry>
         <entry name="reloadIntervalMin" type="Int">
-            <default>20</default>
+            <default>30</default>
         </entry>
         <entry name="debugLogging" type="Bool">
             <default>false</default>
         </entry>
-
-        <entry name="xmlCacheJson" type="String">
-            <default></default>
+        <entry name="qml_XHR_ALLOW_FILE_READ" type="Bool">
+            <default>false</default>
         </entry>
-	<entry name="soundEffectsEnabled" type="Bool">
-    	<default>true</default>
-    	<label>Sounds Enabled</label>
-    	<description>Play ambient sounds for weather and time changes.</description>
-	</entry>
-    <entry name="useSunriseSunset" type="Bool">
-    <default>true</default>
-    <label>Use Sunrise/Sunset Times</label>
-    <description>Automatically adjust wallpaper and brightness based on real sunrise and sunset.</description>
-    </entry>
     </group>
 
     <group name="Appearance">
-        <entry name="renderMeteogram" type="Bool">
-            <default>false</default>
-        </entry>
         <entry name="layoutType" type="Enum">
             <choices>
                 <choice name="Horizontal"/>
                 <choice name="Vertical"/>
                 <choice name="Compact"/>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="iconSizeMode" type="Enum">
+            <choices>
+                <choice name="Fit"/>
+                <choice name="Fixed"/>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="textSizeMode" type="Enum">
+            <choices>
+                <choice name="Fit"/>
+                <choice name="Fixed"/>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="desktopMode" type="Enum">
+            <choices>
+                <choice name="Icon"/>
+                <choice name="Meteogram"/>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="widgetOrder" type="Enum">
+            <choices>
+                <choice name="widgetOrderIconFirst"/>
+                <choice name="widgetOrderTextFirst"/>
             </choices>
             <default>0</default>
         </entry>
@@ -62,8 +82,78 @@
         <entry name="widgetFontName" type="String">
             <default></default>
         </entry>
+        <entry name="textDropShadow" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="widgetFontSize" type="Int">
+            <default>20</default>
+        </entry>
+        <entry name="widgetIconSize" type="Int">
             <default>32</default>
+        </entry>
+        <entry name="iconDropShadow" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="iconVisible" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="textVisible" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="leftOuterMargin" type="Int">
+            <default>0</default>
+        </entry>
+        <entry name="innerMargin" type="Int">
+            <default>0</default>
+        </entry>
+        <entry name="rightOuterMargin" type="Int">
+            <default>0</default>
+        </entry>
+        <entry name="topOuterMargin" type="Int">
+            <default>0</default>
+        </entry>
+        <entry name="bottomOuterMargin" type="Int">
+            <default>0</default>
+        </entry>
+    </group>
+
+    <group name="Meteogram">
+        <entry name="widgetWidth" type="Int">
+            <default>800</default>
+        </entry>
+        <entry name="widgetHeight" type="Int">
+            <default>320</default>
+        </entry>
+        <entry name="hourSpanOm" type="Int">
+            <default>60</default>
+        </entry>
+        <entry name="mgAxisFontSize" type="Int">
+            <default>11</default>
+        </entry>
+        <entry name="mgPressureFontSize" type="Int">
+            <default>11</default>
+        </entry>
+        <entry name="mgHoursFontSize" type="Int">
+            <default>10</default>
+        </entry>
+        <entry name="mgTrailingZeroesFontSize" type="Int">
+            <default>6</default>
+        </entry>
+        <entry name="tempLabelPosition" type="Enum">
+            <choices>
+                <choice name="Top"/>
+                <choice name="Bottom"/>
+                <choice name="None"/>
+            </choices>
+            <default>0</default>
+        </entry>
+        <entry name="pressureLabelPosition" type="Enum">
+            <choices>
+                <choice name="Top"/>
+                <choice name="Bottom"/>
+                <choice name="None"/>
+            </choices>
+            <default>0</default>
         </entry>
     </group>
 

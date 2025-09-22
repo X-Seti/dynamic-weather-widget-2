@@ -14,33 +14,63 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http: //www.gnu.org/licenses/>.
  */
-import QtQuick 2.5
-import QtQuick.Window 2.5
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.components 2.0 as PlasmaComponents
-import org.kde.plasma.core 2.0 as PlasmaCore
+import QtQuick 2.15
+import org.kde.plasma.components 3.0 as PlasmaComponents
+import org.kde.plasma.core as PlasmaCore
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasma5support as Plasma5Support
+import QtQuick.Layouts
 
 Item {
     id: fullRepresentation
 
-    property int imageWidth: 800 * Screen.devicePixelRatio  // Makes yr.no images grainy,
-    property int imageHeight: 320 * Screen.devicePixelRatio + defaultFontPixelSize// prefer rendering meteograms
+    property int imageWidth: widgetWidth // 800 950
+    property int imageHeight: widgetHeight // + defaultFontPixelSize // 320
 
-    property double defaultFontPixelSize: theme.defaultFont.pixelSize
+    property double defaultFontPixelSize: Kirigami.Theme.defaultFont.pixelSize
     property double footerHeight: defaultFontPixelSize
 
     property int nextDayItemSpacing: defaultFontPixelSize * 0.5
     property int nextDaysHeight: defaultFontPixelSize * 9
     property int nextDaysVerticalMargin: defaultFontPixelSize
-    property int hourLegendMargin: defaultFontPixelSize * 2
+    property int hourLegendMargin: defaultFontPixelSize * 2 + 2
     property double nextDayItemWidth: (imageWidth / nextDaysCount) - nextDayItemSpacing - hourLegendMargin / nextDaysCount
     property int headingHeight: defaultFontPixelSize * 2
     property double hourLegendBottomMargin: defaultFontPixelSize * 0.2
+    property string fullRepresentationAlias: main.fullRepresentationAlias
 
     implicitWidth: imageWidth
     implicitHeight: headingHeight + imageHeight + footerHeight + nextDaysHeight + 14
 
+    Layout.minimumWidth: imageWidth
+    Layout.minimumHeight: headingHeight + imageHeight + footerHeight + nextDaysHeight + 14 + 69 //36
+    Layout.preferredWidth: imageWidth
+    Layout.preferredHeight: headingHeight + imageHeight + footerHeight + nextDaysHeight + 14 + 69 //36
 
+    onFullRepresentationAliasChanged: {
+
+        // for(const [key,value] of Object.entries(currentPlace)) { console.log(`  ${key}: ${value}`) }
+        var t = main.fullRepresentationAlias
+
+        switch (main.timezoneType) {
+            case 0:
+                t += " (" + getLocalTimeZone()+ ")"
+                break
+            case 1:
+                t += " (" + i18n("UTC") + ")"
+                break
+            case 2:
+                if (main.currentPlace.timezoneShortName === "") {
+                    main.currentPlace.timezoneShortName = "unknown"
+                }
+                t += " (" +  main.currentPlace.timezoneShortName + ")"
+                break
+            default:
+                t += " (" + "TBA" + ")"
+                break
+        }
+        currentLocationText.text = t
+    }
 
     PlasmaComponents.Label {
         id: currentLocationText
@@ -49,26 +79,12 @@ Item {
         anchors.top: parent.top
         verticalAlignment: Text.AlignTop
 
-        text: {
-            var t = main.placeAlias
-            switch (timezoneType) {
-                case 0:
-                    t += " (" + getLocalTimeZone()+ ")"
-                    break
-                case 1:
-                    t += " (" + i18n("UTC") + ")"
-                    break
-                case 2:
-                    if (main.timezoneShortName === "") {
-                        main.timezoneShortName = "unknown"
-                    }
-                    t += " (" +  main.timezoneShortName + ")"
-                    break
-                default:
-                    t += " (" + "TBA" + ")"
-                    break
-                }
-            return t
+        text: ""
+        Component.onCompleted: {
+            dbgprint2("FullRepresentation")
+            dbgprint((main.currentPlace.alias))
+            dbgprint2(currentLocationText.text)
+            nextDaysCount = nextDaysModel.count
         }
     }
 
@@ -78,16 +94,17 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         verticalAlignment: Text.AlignTop
-        visible: !onlyOnePlace
-        color: theme.textColor
+        visible: (placesCount > 1)
+        color: Kirigami.Theme.textColor
         text: i18n("Next Location") + " >>"
     }
 
     MouseArea {
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: (nextLocationText.visible) ? Qt.PointingHandCursor : Qt.ArrowCursor
         anchors.fill: nextLocationText
 
-        hoverEnabled: true
+        hoverEnabled: nextLocationText.visible
+        enabled: nextLocationText.visible
 
         onClicked: {
             dbgprint('clicked next location')
@@ -110,16 +127,17 @@ Item {
         anchors.top: nextLocationText.top
         anchors.rightMargin: 15
         verticalAlignment: Text.AlignTop
-        visible: !onlyOnePlace
-        color: theme.textColor
+        visible: (placesCount > 1)
+        color: Kirigami.Theme.textColor
         text: "<< " + i18n("Previous Location")
     }
 
     MouseArea {
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: (prevLocationText.visible) ? Qt.PointingHandCursor : Qt.ArrowCursor
         anchors.fill: prevLocationText
 
-        hoverEnabled: true
+        hoverEnabled: prevLocationText.visible
+        enabled: prevLocationText.visible
 
         onClicked: {
             dbgprint('clicked previous location')
@@ -139,20 +157,18 @@ Item {
         id: meteogram2
         anchors.top: parent.top
         anchors.topMargin: headingHeight
+        anchors.left: parent.left
+        anchors.leftMargin: -2
         width: imageWidth
         height: imageHeight
-     }
-  /*
-     *
-     * NEXT DAYS
-     *
-     */
+    }
+
     ListView {
         id: nextDaysView
         anchors.bottom: parent.bottom
         anchors.bottomMargin: footerHeight + nextDaysVerticalMargin
         anchors.left: parent.left
-        anchors.leftMargin: hourLegendMargin
+        anchors.leftMargin: hourLegendMargin - 2
         anchors.right: parent.right
         height: nextDaysHeight
 
@@ -170,44 +186,45 @@ Item {
     Column {
         id: hourLegend
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: footerHeight + nextDaysVerticalMargin
-        spacing: 1 * Screen.devicePixelRatio
+        anchors.bottomMargin: footerHeight + nextDaysVerticalMargin - 4
+        // anchors.rightMargin: -2
+        spacing: 1
 
         width: hourLegendMargin
         height: nextDaysHeight - defaultFontPixelSize
 
         PlasmaComponents.Label {
-            text: twelveHourClockEnabled ? '3AM' : '3h'
+            text: twelveHourClockEnabled ? '3AM' : '3:00'
             width: parent.width
             height: parent.height / 4
-            font.pixelSize: defaultFontPixelSize * 0.8
+            font.pixelSize: defaultFontPixelSize * 0.75
             font.pointSize: -1
             horizontalAlignment: Text.AlignRight
             opacity: 0.6
         }
         PlasmaComponents.Label {
-            text: twelveHourClockEnabled ? '9AM' : '9h'
+            text: twelveHourClockEnabled ? '9AM' : '9:00'
             width: parent.width
             height: parent.height / 4
-            font.pixelSize: defaultFontPixelSize * 0.8
+            font.pixelSize: defaultFontPixelSize * 0.75
             font.pointSize: -1
             horizontalAlignment: Text.AlignRight
             opacity: 0.6
         }
         PlasmaComponents.Label {
-            text: twelveHourClockEnabled ? '3PM' : '15h'
+            text: twelveHourClockEnabled ? '3PM' : '15:00'
             width: parent.width
             height: parent.height / 4
-            font.pixelSize: defaultFontPixelSize * 0.8
+            font.pixelSize: defaultFontPixelSize * 0.75
             font.pointSize: -1
             horizontalAlignment: Text.AlignRight
             opacity: 0.6
         }
         PlasmaComponents.Label {
-            text: twelveHourClockEnabled ? '9PM' : '21h'
+            text: twelveHourClockEnabled ? '9PM' : '21:00'
             width: parent.width
             height: parent.height / 4
-            font.pixelSize: defaultFontPixelSize * 0.8
+            font.pixelSize: defaultFontPixelSize * 0.75
             font.pointSize: -1
             horizontalAlignment: Text.AlignRight
             opacity: 0.6
@@ -220,6 +237,7 @@ Item {
      * FOOTER
      *
      */
+
     MouseArea {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
@@ -260,10 +278,9 @@ Item {
         }
 
         onClicked: {
-            main.reloadData()
+            main.loadDataFromInternet()
         }
     }
-
 
     PlasmaComponents.Label {
         id: creditText
@@ -272,7 +289,7 @@ Item {
         anchors.bottom: parent.bottom
         verticalAlignment: Text.AlignBottom
 
-        text: creditLabel
+        text: currentPlace.creditLabel
     }
 
     MouseArea {
@@ -282,8 +299,8 @@ Item {
         hoverEnabled: true
 
         onClicked: {
-            dbgprint('opening: ', creditLink)
-            Qt.openUrlExternally(creditLink)
+            dbgprint('opening: ', currentPlace.creditLink)
+            Qt.openUrlExternally(currentPlace.creditLink)
         }
 
         onEntered: {

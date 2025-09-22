@@ -14,22 +14,63 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http: //www.gnu.org/licenses/>.
  */
-import QtQuick 2.2
+import QtQuick
 import org.kde.plasma.plasmoid 2.0
+import org.kde.plasma.core 2.0 as PlasmaCore
 
-Item {
-    id: compactRepresentationInTray
-    
+Loader {
+    id: compactRepresentation
+
     anchors.fill: parent
-    
-    CompactItem {
-        id: compactItem
-        inTray: true
+
+    property int defaultWidgetSize: -1
+
+    sourceComponent: compactIteminTray
+
+    CompactIteminTray {
+        id: compactIteminTray
     }
-    
-    Plasmoid.toolTipMainText: placeAlias
-    Plasmoid.toolTipSubText: tooltipSubText
-    Plasmoid.toolTipTextFormat: Text.RichText
-    Plasmoid.icon: Qt.resolvedUrl('../images/weather-widget.svg')
-    
+
+    MouseArea {
+        anchors.fill: parent
+
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+
+        hoverEnabled: true
+
+        onClicked: {
+            dbgprint("CompactRepresentationInTray")
+            let t = main.expanded
+            if (t) {
+                dbgprint("Closing FullRepresentationInTray")
+            } else {
+                dbgprint("Opening FullRepresentationInTray")
+
+            }
+            if (mouse.button === Qt.MiddleButton) {
+                loadingData.failedAttemptCount = 0
+                main.loadDataFromInternet()
+            } else {
+                main.expanded = !main.expanded
+            }
+        }
+
+        onEntered: main.refreshTooltipSubText()
+
+    }
+    Component.onCompleted: {
+        if (main.inTray)
+            layoutTimer1.start()
+    }
+    Timer {
+        id: layoutTimer1
+        interval: 100
+        running: false
+        repeat: false
+        onTriggered: {
+            if ((defaultWidgetSize === -1) && ( compactRepresentation.width > 0 ||  compactRepresentation.height)) {
+                defaultWidgetSize = Math.min(compactRepresentation.width, compactRepresentation.height)
+            }
+        }
+    }
 }
